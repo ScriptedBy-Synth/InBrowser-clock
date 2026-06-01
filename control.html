@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clock Control Panel</title>
+    <style>
+        body { background: #111; color: #fff; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .panel { background: #222; padding: 30px; border-radius: 8px; border: 2px solid #444; width: 340px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2 { margin: 0 0 20px; color: #ff4444; text-transform: uppercase; font-size: 24px; }
+        .form-group { margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px; }
+        .form-group:last-of-type { border-bottom: none; }
+        label { font-size: 15px; font-weight: bold; display: block; margin-bottom: 8px; color: #bbb; }
+        .time-select-container { display: flex; gap: 6px; align-items: center; font-size: 20px; font-weight: bold; color: #ff4444; margin-top: 8px; }
+        select { flex: 1; padding: 10px; background: #333; border: 1px solid #555; color: #fff; font-size: 16px; border-radius: 4px; text-align: center; }
+        .radio-group { display: flex; gap: 15px; font-size: 16px; }
+        .radio-group input { transform: scale(1.1); margin-right: 4px; cursor: pointer; }
+        .ctrl-row { display: flex; gap: 10px; align-items: center; }
+        .slider-val { font-family: monospace; font-size: 16px; color: #ff4444; min-width: 45px; text-align: right; }
+        input[type="range"] { flex: 1; accent-color: #ff0000; cursor: pointer; }
+        button { width: 100%; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; border: none; transition: background 0.1s; }
+        .btn-update { background: #ff0000; color: #fff; box-shadow: 0 0 10px rgba(255,0,0,0.4); margin-bottom: 15px; }
+        .btn-update:hover { background: #cc0000; }
+        .btn-pause { background: #444; color: #fff; border: 1px solid #555; }
+        .btn-pause.paused { background: #ffaa00; color: #000; border-color: #ffaa00; box-shadow: 0 0 10px rgba(255,170,0,0.4); }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h2>Clock Control</h2>
+        
+        <!-- Time Mode -->
+        <div class="form-group">
+            <label>Operating Mode</label>
+            <div class="radio-group">
+                <label><input type="radio" name="mode" value="live" checked> Live Time</label>
+                <label><input type="radio" name="mode" value="custom"> Custom Time</label>
+            </div>
+            <div id="custom-ui" style="display: none;">
+                <div class="time-select-container">
+                    <select id="h"></select>:<select id="m"></select>:<select id="s"></select>
+                    <select id="ampm"><option>AM</option><option>PM</option></select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Update Button -->
+        <button id="go" class="btn-update">Update Clock Time</button>
+
+        <!-- Dynamic Ticking Speed Controls -->
+        <div class="form-group">
+            <label>Tick Rate Speed Multiplier</label>
+            <div class="ctrl-row">
+                <input type="range" id="speed-slider" min="0" max="10" step="0.1" value="1">
+                <span id="speed-label" class="slider-val">1.0x</span>
+            </div>
+        </div>
+
+        <!-- System State Freeze -->
+        <div class="form-group">
+            <label>Playback State</label>
+            <button id="pause-btn" class="btn-pause">Pause Ticking</button>
+        </div>
+    </div>
+
+    <script>
+        const fill = (el, max, start = 0) => {
+            for (let i = start; i <= max; i++) el.insertAdjacentHTML('beforeend', `<option value="${i}">${String(i).padStart(2,'0')}</option>`);
+        };
+        fill(document.getElementById('h'), 12, 1);
+        fill(document.getElementById('m'), 59);
+        fill(document.getElementById('s'), 59);
+
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        const customUi = document.getElementById('custom-ui');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedLabel = document.getElementById('speed-label');
+        const pauseBtn = document.getElementById('pause-btn');
+
+        // Initialize state markers safely inside localStorage
+        localStorage.setItem('clock_tick_speed', '1');
+        localStorage.setItem('clock_is_paused', 'false');
+
+        // Mode Toggles
+        modeRadios.forEach(r => r.addEventListener('change', e => {
+            customUi.style.display = e.target.value === 'custom' ? 'block' : 'none';
+            if (e.target.value === 'live') {
+                localStorage.setItem('clock_mode', 'live');
+            }
+        }));
+
+        // Push target time changes
+        document.getElementById('go').addEventListener('click', () => {
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            localStorage.setItem('clock_mode', mode);
+            if (mode === 'custom') {
+                let hr = parseInt(document.getElementById('h').value);
+                const ampm = document.getElementById('ampm').value;
+                if (ampm === 'PM' && hr !== 12) hr += 12;
+                if (ampm === 'AM' && hr === 12) hr = 0;
+                localStorage.setItem('clock_override_time', `${hr}:${document.getElementById('m').value}:${document.getElementById('s').value}`);
+            }
+        });
+
+        // Speed Slider Control Updates
+        speedSlider.addEventListener('input', (e) => {
+            const speed = e.target.value;
+            speedLabel.textContent = parseFloat(speed).toFixed(1) + 'x';
+            localStorage.setItem('clock_tick_speed', speed);
+        });
+
+        // Pause Toggle Control Updates
+        pauseBtn.addEventListener('click', () => {
+            const isCurrentlyPaused = localStorage.getItem('clock_is_paused') === 'true';
+            const nextState = !isCurrentlyPaused;
+            
+            localStorage.setItem('clock_is_paused', String(nextState));
+            if (nextState) {
+                pauseBtn.textContent = "Clock Paused";
+                pauseBtn.classList.add('paused');
+            } else {
+                pauseBtn.textContent = "Pause Ticking";
+                pauseBtn.classList.remove('paused');
+            }
+        });
+    </script>
+</body>
+</html>
+
+// Written By ScriptedBy-Synth With The Partial Use Of AI
